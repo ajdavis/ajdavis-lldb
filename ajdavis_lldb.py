@@ -29,10 +29,10 @@ def bson_as_json_command(debugger, command, result, internal_dict):
     command_args = shlex.split(command)
     parser = bson_as_json_options()
     options, args = parser.parse_args(command_args)
-    target = debugger.GetSelectedTarget()
-    process = target.GetProcess()
-    thread = process.GetSelectedThread()
-    frame = thread.GetFrameAtIndex(0)
+
+    process = debugger.GetSelectedTarget().GetProcess()
+    frame = process.GetSelectedThread().GetFrameAtIndex(0)
+
     for arg in args:
         value = frame.FindVariable(arg)
         result.AppendMessage(bson_as_json(value, debugger))
@@ -66,8 +66,11 @@ def alloc_as_bytes(buf, offset, debugger):
     return process.ReadMemory(buf_addr, len, error)
 
 
-def bson_as_json(value, debugger):
+def bson_as_json(value, debugger, verbose=False, oneline=False):
     try:
+        if value.TypeIsPointerType():
+            value = value.Dereference()
+
         codec_options = bson.CodecOptions(document_class=OrderedDict)
 
         target = debugger.GetSelectedTarget()
