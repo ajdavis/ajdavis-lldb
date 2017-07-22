@@ -202,11 +202,11 @@ def bson_type_summary(value, internal_dict):
 
 def __lldb_init_module(debugger, internal_dict):
     debugger.HandleCommand(
-        'type summary add -F ajdavis_lldb.bson_type_summary bson_t')
+        'type summary add -F lldb_mongoc.bson_type_summary bson_t')
 
     debugger.HandleCommand(
         'command script add --help \"%s\"'
-        ' -f ajdavis_lldb.bson_as_json_command bson' %
+        ' -f lldb_mongoc.bson_as_json_command bson' %
         bson_as_json_options().format_help().replace('"', "'"))
 
-    sys.stderr.write('"bson" command installed by ajdavis_lldb\n')
+    sys.stderr.write('"bson" command installed by lldb_mongoc\n')

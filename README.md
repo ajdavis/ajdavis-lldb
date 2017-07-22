@@ -1,7 +1,9 @@
-A. Jesse Jiryu Davis's Personal LLDB Python Scripts
-===================================================
+LLDB Scripts for libbson and libmongoc 
+======================================
 
-Helpers to print libbson's `bson_t` struct as JSON in the LLDB console.
+A handy LLDB script for debugging C programs that use MongoDB with
+[libbson or libmongoc](http://mongoc.org/). One feature is implemented so far:
+it prints BSON data as JSON in the LLDB console.
 
 For example, say you have a C program like:
     
@@ -26,7 +28,7 @@ This example LLDB session shows how a `bson_t` struct is pretty-printed with
 either the standard `print` command or the custom `bson` command:
 
     > lldb a.out
-    "bson" command installed by ajdavis_lldb
+    "bson" command installed by lldb_mongoc
     (lldb) breakpoint set -l 11
     (lldb) run
     Process 81202 stopped
@@ -34,11 +36,17 @@ either the standard `print` command or the custom `bson` command:
        10
     -> 11  	   return 0;
        12  	}
+
+This is the exciting part - your `bson_t` is printed as JSON!
+
     (lldb) print b
     (bson_t) $0 = {
       "x": 1,
       "y": 2
     }
+
+The "bson" command provides more options:
+
     (lldb) bson -v --one-line b
     len=19
     flags=INLINE|STATIC
@@ -66,12 +74,12 @@ then run the previous command again.
 
 ## Configure LLDB
 
-Place the `ajdavis_lldb.py` file somewhere, and create a file `~/.lldbinit`
+Place the [lldb_mongoc.py](https://raw.githubusercontent.com/ajdavis/ajdavis-lldb/master/ajdavis_lldb.py) file somewhere, and create a file `~/.lldbinit`
 containing:
 
-    command script import /path/to/ajdavis_lldb.py
+    command script import /path/to/lldb_mongoc.py
 
-If you see `"bson" command installed by ajdavis_lldb` at the beginning of your
+If you see `"bson" command installed by lldb_mongoc` at the beginning of your
 LLDB session, you've installed the script correctly.
 
 ## Debug Build of libbson
