@@ -96,4 +96,4 @@ do:
 License
 -------
 
-Public domain.
+Apache 2.
