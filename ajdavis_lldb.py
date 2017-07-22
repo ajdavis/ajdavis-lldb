@@ -36,6 +36,36 @@ def flags_str(flags):
 _UNPACK_INT = struct.Struct("<i").unpack
 
 
+if sys.version_info[0] == 3:
+    string_types = (bytes, str)
+else:
+    string_types = (str, unicode)
+
+
+class Key(str):
+    def __init__(self, key):
+        self.key = key
+
+    def __str__(self):
+        return self.key
+
+    def __repr__(self):
+        return "Key(%r)" % self.key
+
+    def __hash__(self):
+        return id(self)
+
+
+class DuplicateKeyDict(OrderedDict):
+    """Allows duplicate keys in dicts."""
+
+    def __setitem__(self, key, value):
+        if isinstance(key, string_types):
+            key = Key(key)
+
+        super(DuplicateKeyDict, self).__setitem__(key, value)
+
+
 def check(error):
     if not error.success:
         raise Exception(str(error))
@@ -60,12 +90,12 @@ def get_allocated_bytes(buf, offset, debugger):
     return process.ReadMemory(buf_addr, len, error)
 
 
-def bson_as_json(value, debugger, verbose=False, oneline=False):
+def bson_as_json(value, debugger, verbose=False, oneline=False, raw=False):
     try:
         if value.TypeIsPointerType():
             value = value.Dereference()
 
-        codec_options = bson.CodecOptions(document_class=OrderedDict)
+        codec_options = bson.CodecOptions(document_class=DuplicateKeyDict)
 
         target = debugger.GetSelectedTarget()
         len = value.GetChildMemberWithName('len').GetValueAsUnsigned()
@@ -81,13 +111,16 @@ def bson_as_json(value, debugger, verbose=False, oneline=False):
             inline_t = target.FindFirstType('bson_impl_inline_t')
             inline = value.Cast(inline_t)
             data = inline.GetChildMemberWithName('data')
-            raw = bson.BSON(get_inline_bytes(data))
+            raw_bson = get_inline_bytes(data)
         else:
             alloc_t = target.FindFirstType('bson_impl_alloc_t')
             alloc = value.Cast(alloc_t)
             offset = alloc.GetChildMemberWithName('offset').GetValueAsUnsigned()
             buf = alloc.GetChildMemberWithName('buf').Dereference()
-            raw = bson.BSON(get_allocated_bytes(buf, offset, debugger))
+            raw_bson = get_allocated_bytes(buf, offset, debugger)
+
+        if raw:
+            return repr(raw_bson)
 
         ret = ''
         if verbose:
@@ -99,7 +132,8 @@ def bson_as_json(value, debugger, verbose=False, oneline=False):
         else:
             indent = 2
 
-        ret += json.dumps(raw.decode(codec_options), indent=indent)
+        ret += json.dumps(bson.BSON(raw_bson).decode(codec_options),
+                          indent=indent)
         return ret
     except Exception as exc:
         return str(exc)
@@ -119,6 +153,8 @@ def bson_as_json_options():
                       help='Print length and flags of bson_t.')
     parser.add_option('-1', '--oneline', action='store_true',
                       help="Don't indent JSON")
+    parser.add_option('-r', '--raw', action='store_true',
+                      help='Print byte string, not JSON')
 
     return parser
 
@@ -137,7 +173,8 @@ def bson_as_json_command(debugger, command, result, internal_dict):
             bson_as_json(value,
                          debugger,
                          verbose=options.verbose,
-                         oneline=options.oneline))
+                         oneline=options.oneline,
+                         raw=options.raw))
 
 
 def bson_type_summary(value, internal_dict):
