@@ -35,10 +35,34 @@ def bson_as_json_command(debugger, command, result, internal_dict):
 
     for arg in args:
         value = frame.FindVariable(arg)
-        result.AppendMessage(bson_as_json(value, debugger))
+        result.AppendMessage(
+            bson_as_json(value,
+                         debugger,
+                         verbose=options.verbose,
+                         oneline=options.oneline))
 
 
-INLINE = 1
+FLAGS = OrderedDict([
+    ('INLINE', 1 << 0),
+    ('STATIC', 1 << 1),
+    ('RDONLY', 1 << 2),
+    ('CHILD', 1 << 3),
+    ('IN_CHILD', 1 << 4),
+    ('NO_FREE', 1 << 5),
+])
+
+
+ALL_FLAGS = (1 << 6) - 1
+
+
+def flags_str(flags):
+    if flags == 0:
+        return 'flags=0'
+
+    return 'flags=' + '|'.join(
+        name for name, value in FLAGS.items() if flags & value)
+
+
 _UNPACK_INT = struct.Struct("<i").unpack
 
 
@@ -74,8 +98,16 @@ def bson_as_json(value, debugger, verbose=False, oneline=False):
         codec_options = bson.CodecOptions(document_class=OrderedDict)
 
         target = debugger.GetSelectedTarget()
+        len = value.GetChildMemberWithName('len').GetValueAsUnsigned()
         flags = value.GetChildMemberWithName('flags').GetValueAsUnsigned()
-        if flags & INLINE:
+
+        if flags & ~ALL_FLAGS or len < 5 or len > 16 * 1024 * 1024:
+            return 'uninitialized'
+
+        if flags & FLAGS['INLINE']:
+            if len > 120:
+                return 'uninitialized'
+
             inline_t = target.FindFirstType('bson_impl_inline_t')
             inline = value.Cast(inline_t)
             data = inline.GetChildMemberWithName('data')
@@ -87,7 +119,17 @@ def bson_as_json(value, debugger, verbose=False, oneline=False):
             buf = alloc.GetChildMemberWithName('buf').Dereference()
             raw = bson.BSON(alloc_as_bytes(buf, offset, debugger))
 
-        return json.dumps(raw.decode(codec_options))
+        if oneline:
+            indent = None
+        else:
+            indent = 2
+
+        ret = ''
+        if verbose:
+            ret += 'len=%s\n' % len
+            ret += flags_str(flags) + '\n'
+        ret += json.dumps(raw.decode(codec_options), indent=indent)
+        return ret
     except Exception as exc:
         return str(exc)
 
