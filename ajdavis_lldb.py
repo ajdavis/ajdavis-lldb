@@ -43,14 +43,8 @@ else:
 
 
 class Key(str):
-    def __init__(self, key):
-        self.key = key
-
-    def __str__(self):
-        return self.key
-
     def __repr__(self):
-        return "Key(%r)" % self.key
+        return "Key(%s)" % super(Key, self).__repr__()
 
     def __hash__(self):
         return id(self)
@@ -92,12 +86,21 @@ def get_allocated_bytes(buf, offset, debugger):
 
 def bson_as_json(value, debugger, verbose=False, oneline=False, raw=False):
     try:
+        target = debugger.GetSelectedTarget()
+        inline_t = target.FindFirstType('bson_impl_inline_t')
+        alloc_t = target.FindFirstType('bson_impl_alloc_t')
+
+        if not inline_t.GetDisplayTypeName():
+            return """error: libbson not compiled with debug symbols
+Download latest mongo-c-driver.tar.gz from mongoc.org and do:
+./configure --enable-debug
+make
+sudo make install
+"""
+
         if value.TypeIsPointerType():
             value = value.Dereference()
 
-        codec_options = bson.CodecOptions(document_class=DuplicateKeyDict)
-
-        target = debugger.GetSelectedTarget()
         len = value.GetChildMemberWithName('len').GetValueAsUnsigned()
         flags = value.GetChildMemberWithName('flags').GetValueAsUnsigned()
 
@@ -108,12 +111,10 @@ def bson_as_json(value, debugger, verbose=False, oneline=False, raw=False):
             if len > 120:
                 return 'uninitialized'
 
-            inline_t = target.FindFirstType('bson_impl_inline_t')
             inline = value.Cast(inline_t)
             data = inline.GetChildMemberWithName('data')
             raw_bson = get_inline_bytes(data)
         else:
-            alloc_t = target.FindFirstType('bson_impl_alloc_t')
             alloc = value.Cast(alloc_t)
             offset = alloc.GetChildMemberWithName('offset').GetValueAsUnsigned()
             buf = alloc.GetChildMemberWithName('buf').Dereference()
@@ -132,6 +133,7 @@ def bson_as_json(value, debugger, verbose=False, oneline=False, raw=False):
         else:
             indent = 2
 
+        codec_options = bson.CodecOptions(document_class=DuplicateKeyDict)
         ret += json.dumps(bson.BSON(raw_bson).decode(codec_options),
                           indent=indent)
         return ret
@@ -150,15 +152,15 @@ class OptionParserNoExit(optparse.OptionParser):
 
 
 def bson_as_json_options():
-    usage = "usage: %prog [options]"
+    usage = "usage: %prog [options] VARIABLE"
     description = '''Prints a libbson bson_t struct as JSON'''
-    parser = OptionParserNoExit(description=description, prog='json',
+    parser = OptionParserNoExit(description=description, prog='bson',
                                 usage=usage,
                                 add_help_option=False)
     parser.add_option('-v', '--verbose', action='store_true',
                       help='Print length and flags of bson_t.')
-    parser.add_option('-1', '--oneline', action='store_true',
-                      help="Don't indent JSON")
+    parser.add_option('-1', '--one-line', action='store_true',
+                      dest='oneline', help="Don't indent JSON")
     parser.add_option('-r', '--raw', action='store_true',
                       help='Print byte string, not JSON')
     parser.add_option('-h', '--help', action='store_true',
@@ -177,7 +179,7 @@ def bson_as_json_command(debugger, command, result, internal_dict):
         result.AppendMessage(str(exc))
         return
 
-    if options.help:
+    if options.help or not args:
         result.AppendMessage(parser.format_help())
         return
 
@@ -204,7 +206,7 @@ def __lldb_init_module(debugger, internal_dict):
 
     debugger.HandleCommand(
         'command script add --help \"%s\"'
-        ' -f ajdavis_lldb.bson_as_json_command json' %
+        ' -f ajdavis_lldb.bson_as_json_command bson' %
         bson_as_json_options().format_help().replace('"', "'"))
 
-    sys.stderr.write('json command installed by ajdavis_lldb\n')
+    sys.stderr.write('"bson" command installed by ajdavis_lldb\n')
