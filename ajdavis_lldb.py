@@ -144,17 +144,25 @@ if not bson:
         return "No PyMongo, do `python -m pip install pymongo`"
 
 
+class OptionParserNoExit(optparse.OptionParser):
+    def exit(self, status=0, msg=None):
+        raise Exception(msg)
+
+
 def bson_as_json_options():
     usage = "usage: %prog [options]"
     description = '''Prints a libbson bson_t struct as JSON'''
-    parser = optparse.OptionParser(description=description, prog='json',
-                                   usage=usage)
+    parser = OptionParserNoExit(description=description, prog='json',
+                                usage=usage,
+                                add_help_option=False)
     parser.add_option('-v', '--verbose', action='store_true',
                       help='Print length and flags of bson_t.')
     parser.add_option('-1', '--oneline', action='store_true',
                       help="Don't indent JSON")
     parser.add_option('-r', '--raw', action='store_true',
                       help='Print byte string, not JSON')
+    parser.add_option('-h', '--help', action='store_true',
+                      help='Print help and exit')
 
     return parser
 
@@ -162,7 +170,16 @@ def bson_as_json_options():
 def bson_as_json_command(debugger, command, result, internal_dict):
     command_args = shlex.split(command)
     parser = bson_as_json_options()
-    options, args = parser.parse_args(command_args)
+
+    try:
+        options, args = parser.parse_args(command_args)
+    except Exception as exc:
+        result.AppendMessage(str(exc))
+        return
+
+    if options.help:
+        result.AppendMessage(parser.format_help())
+        return
 
     process = debugger.GetSelectedTarget().GetProcess()
     frame = process.GetSelectedThread().GetFrameAtIndex(0)
@@ -186,6 +203,8 @@ def __lldb_init_module(debugger, internal_dict):
         'type summary add -F ajdavis_lldb.bson_type_summary bson_t')
 
     debugger.HandleCommand(
-        'command script add -f ajdavis_lldb.bson_as_json_command json')
+        'command script add --help \"%s\"'
+        ' -f ajdavis_lldb.bson_as_json_command json' %
+        bson_as_json_options().format_help().replace('"', "'"))
 
     sys.stderr.write('json command installed by ajdavis_lldb\n')
