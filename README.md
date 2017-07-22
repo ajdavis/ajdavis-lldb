@@ -74,7 +74,7 @@ then run the previous command again.
 
 ## Configure LLDB
 
-Place the [lldb_mongoc.py](https://raw.githubusercontent.com/ajdavis/ajdavis-lldb/master/ajdavis_lldb.py) file somewhere, and create a file `~/.lldbinit`
+Place the [lldb_mongoc.py](https://raw.githubusercontent.com/ajdavis/lldb-mongoc/master/lldb_mongoc.py) file somewhere, and create a file `~/.lldbinit`
 containing:
 
     command script import /path/to/lldb_mongoc.py
