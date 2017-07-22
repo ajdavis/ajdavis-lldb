@@ -12,36 +12,6 @@ except ImportError:
     bson = None
 
 
-def bson_as_json_options():
-    usage = "usage: %prog [options]"
-    description = '''Prints a libbson bson_t struct as JSON'''
-    parser = optparse.OptionParser(description=description, prog='json',
-                                   usage=usage)
-    parser.add_option('-v', '--verbose', action='store_true',
-                      help='Print length and flags of bson_t.')
-    parser.add_option('-1', '--oneline', action='store_true',
-                      help="Don't indent JSON")
-
-    return parser
-
-
-def bson_as_json_command(debugger, command, result, internal_dict):
-    command_args = shlex.split(command)
-    parser = bson_as_json_options()
-    options, args = parser.parse_args(command_args)
-
-    process = debugger.GetSelectedTarget().GetProcess()
-    frame = process.GetSelectedThread().GetFrameAtIndex(0)
-
-    for arg in args:
-        value = frame.FindVariable(arg)
-        result.AppendMessage(
-            bson_as_json(value,
-                         debugger,
-                         verbose=options.verbose,
-                         oneline=options.oneline))
-
-
 FLAGS = OrderedDict([
     ('INLINE', 1 << 0),
     ('STATIC', 1 << 1),
@@ -71,15 +41,15 @@ def check(error):
         raise Exception(str(error))
 
 
-def inline_as_bytes(data):
+def get_inline_bytes(data):
     error = lldb.SBError()
     len = data.GetData().GetSignedInt32(error, 0)
     check(error)
     return b''.join(chr(b) for b in data.GetData().uint8[:len])
 
 
-def alloc_as_bytes(buf, offset, debugger):
-    # I don't know why this must be so different from inline_as_bytes.
+def get_allocated_bytes(buf, offset, debugger):
+    # I don't know why this must be so different from get_inline_bytes.
     error = lldb.SBError()
     check(error)
     buf_addr = buf.Dereference().GetAddress().offset + offset
@@ -111,31 +81,28 @@ def bson_as_json(value, debugger, verbose=False, oneline=False):
             inline_t = target.FindFirstType('bson_impl_inline_t')
             inline = value.Cast(inline_t)
             data = inline.GetChildMemberWithName('data')
-            raw = bson.BSON(inline_as_bytes(data))
+            raw = bson.BSON(get_inline_bytes(data))
         else:
             alloc_t = target.FindFirstType('bson_impl_alloc_t')
             alloc = value.Cast(alloc_t)
             offset = alloc.GetChildMemberWithName('offset').GetValueAsUnsigned()
             buf = alloc.GetChildMemberWithName('buf').Dereference()
-            raw = bson.BSON(alloc_as_bytes(buf, offset, debugger))
+            raw = bson.BSON(get_allocated_bytes(buf, offset, debugger))
+
+        ret = ''
+        if verbose:
+            ret += 'len=%s\n' % len
+            ret += flags_str(flags) + '\n'
 
         if oneline:
             indent = None
         else:
             indent = 2
 
-        ret = ''
-        if verbose:
-            ret += 'len=%s\n' % len
-            ret += flags_str(flags) + '\n'
         ret += json.dumps(raw.decode(codec_options), indent=indent)
         return ret
     except Exception as exc:
         return str(exc)
-
-
-def bson_summary(value, internal_dict):
-    return bson_as_json(value, lldb.debugger)
 
 
 if not bson:
@@ -143,9 +110,43 @@ if not bson:
         return "No PyMongo, do `python -m pip install pymongo`"
 
 
+def bson_as_json_options():
+    usage = "usage: %prog [options]"
+    description = '''Prints a libbson bson_t struct as JSON'''
+    parser = optparse.OptionParser(description=description, prog='json',
+                                   usage=usage)
+    parser.add_option('-v', '--verbose', action='store_true',
+                      help='Print length and flags of bson_t.')
+    parser.add_option('-1', '--oneline', action='store_true',
+                      help="Don't indent JSON")
+
+    return parser
+
+
+def bson_as_json_command(debugger, command, result, internal_dict):
+    command_args = shlex.split(command)
+    parser = bson_as_json_options()
+    options, args = parser.parse_args(command_args)
+
+    process = debugger.GetSelectedTarget().GetProcess()
+    frame = process.GetSelectedThread().GetFrameAtIndex(0)
+
+    for arg in args:
+        value = frame.FindVariable(arg)
+        result.AppendMessage(
+            bson_as_json(value,
+                         debugger,
+                         verbose=options.verbose,
+                         oneline=options.oneline))
+
+
+def bson_type_summary(value, internal_dict):
+    return bson_as_json(value, lldb.debugger)
+
+
 def __lldb_init_module(debugger, internal_dict):
     debugger.HandleCommand(
-        'type summary add -F ajdavis_lldb.bson_summary bson_t')
+        'type summary add -F ajdavis_lldb.bson_type_summary bson_t')
 
     debugger.HandleCommand(
         'command script add -f ajdavis_lldb.bson_as_json_command json')
