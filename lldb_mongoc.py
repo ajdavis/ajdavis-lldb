@@ -1,10 +1,11 @@
 import json
-import lldb
 import optparse
 import shlex
 import struct
 import sys
 from collections import OrderedDict
+
+import lldb
 
 try:
     import bson
