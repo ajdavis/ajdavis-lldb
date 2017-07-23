@@ -67,9 +67,9 @@ def check(error):
 
 def get_inline_bytes(data):
     error = lldb.SBError()
-    len = data.GetData().GetSignedInt32(error, 0)
+    length = data.GetData().GetSignedInt32(error, 0)
     check(error)
-    return b''.join(chr(b) for b in data.GetData().uint8[:len])
+    return b''.join(chr(b) for b in data.GetData().uint8[:length])
 
 
 def get_allocated_bytes(buf, offset, debugger):
@@ -80,8 +80,8 @@ def get_allocated_bytes(buf, offset, debugger):
     process = debugger.GetSelectedTarget().process
     len_bytes = process.ReadMemory(buf_addr, 4, error)
     check(error)
-    len = _UNPACK_INT(len_bytes)[0]
-    return process.ReadMemory(buf_addr, len, error)
+    length = _UNPACK_INT(len_bytes)[0]
+    return process.ReadMemory(buf_addr, length, error)
 
 
 def bson_as_json(value, debugger, verbose=False, oneline=False, raw=False):
@@ -101,14 +101,14 @@ sudo make install
         if value.TypeIsPointerType():
             value = value.Dereference()
 
-        len = value.GetChildMemberWithName('len').GetValueAsUnsigned()
+        length = value.GetChildMemberWithName('len').GetValueAsUnsigned()
         flags = value.GetChildMemberWithName('flags').GetValueAsUnsigned()
 
-        if flags & ~ALL_FLAGS or len < 5 or len > 16 * 1024 * 1024:
+        if flags & ~ALL_FLAGS or length < 5 or length > 16 * 1024 * 1024:
             return 'uninitialized'
 
         if flags & FLAGS['INLINE']:
-            if len > 120:
+            if length > 120:
                 return 'uninitialized'
 
             inline = value.Cast(inline_t)
@@ -125,7 +125,7 @@ sudo make install
 
         ret = ''
         if verbose:
-            ret += 'len=%s\n' % len
+            ret += 'len=%s\n' % length
             ret += flags_str(flags) + '\n'
 
         if oneline:
