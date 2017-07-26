@@ -1,4 +1,3 @@
-import json
 import optparse
 import shlex
 import struct
@@ -9,6 +8,7 @@ import lldb
 
 try:
     import bson
+    from bson import json_util
 except ImportError:
     bson = None
 
@@ -135,8 +135,8 @@ sudo make install
             indent = 2
 
         codec_options = bson.CodecOptions(document_class=DuplicateKeyDict)
-        ret += json.dumps(bson.BSON(raw_bson).decode(codec_options),
-                          indent=indent)
+        ret += json_util.dumps(bson.BSON(raw_bson).decode(codec_options),
+                               indent=indent)
         return ret
     except Exception as exc:
         return str(exc)
