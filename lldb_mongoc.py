@@ -1,3 +1,4 @@
+import json
 import optparse
 import shlex
 import struct
@@ -82,6 +83,15 @@ def get_allocated_bytes(buf, offset, debugger):
     check(error)
     length = _UNPACK_INT(len_bytes)[0]
     return process.ReadMemory(buf_addr, length, error)
+
+
+def get_cstring(buf, offset, max_length, debugger):
+    error = lldb.SBError()
+    buf_addr = buf.Dereference().GetAddress().offset + offset
+    process = debugger.GetSelectedTarget().process
+    cstring = process.ReadCStringFromMemory(buf_addr, max_length, error)
+    check(error)
+    return cstring
 
 
 def bson_as_json(value, debugger, verbose=False, oneline=False, raw=False):
@@ -200,9 +210,57 @@ def bson_type_summary(value, internal_dict):
     return bson_as_json(value, lldb.debugger)
 
 
+def bson_iter_type_summary(value, internal_dict):
+    """Format a bson_iter_t as a chunk of JSON and a ^ marking the position."""
+    try:
+        if value.TypeIsPointerType():
+            value = value.Dereference()
+
+        length = value.GetChildMemberWithName('len').GetValueAsUnsigned()
+        data = value.GetChildMemberWithName('raw')
+        raw_bson = get_allocated_bytes(data, 0, lldb.debugger)
+        key_offset = value.GetChildMemberWithName('key').unsigned
+
+        # JSONify the BSON document.
+        codec_options = bson.CodecOptions(document_class=DuplicateKeyDict)
+        as_dict = bson.BSON(raw_bson).decode(codec_options)
+        obj = json_util._json_convert(as_dict, json_util.DEFAULT_JSON_OPTIONS)
+        as_json = json_util.dumps(as_dict)
+
+        if key_offset:
+            # Find the iter's position.
+            # HACK, fails if there are dupe keys, or a value same as this key.
+            key = '"%s"' % get_cstring(data, key_offset, length, lldb.debugger)
+            pos = 0
+            for chunk in json.JSONEncoder().iterencode(obj):
+                if chunk == key:
+                    break
+
+                pos += len(chunk)
+        else:
+            pos = 0
+
+        width = lldb.debugger.GetTerminalWidth() - 1
+        # Where in the JSON string to start printing.
+        start = max(0, pos - width / 2)
+        end = min(len(as_json), pos + width / 2)
+
+        ret = '\n'
+        ret += as_json[start:end]
+        ret += '\n'
+        ret += ' ' * (pos - start) + '^'
+        ret += '\n'
+        return ret
+    except Exception as exc:
+        return str(exc)
+
+
 def __lldb_init_module(debugger, internal_dict):
     debugger.HandleCommand(
         'type summary add -F lldb_mongoc.bson_type_summary bson_t')
+
+    debugger.HandleCommand(
+        'type summary add -F lldb_mongoc.bson_iter_type_summary bson_iter_t')
 
     debugger.HandleCommand(
         'command script add --help \"%s\"'

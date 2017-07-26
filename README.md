@@ -2,8 +2,10 @@ LLDB Scripts for libbson and libmongoc
 ======================================
 
 A handy LLDB script for debugging C programs that use MongoDB with
-[libbson or libmongoc](http://mongoc.org/). One feature is implemented so far:
-it prints BSON data as JSON in the LLDB console.
+[libbson or libmongoc](http://mongoc.org/). Two features are implemented so far:
+it prints BSON data as JSON in the LLDB console, and prints a `bson_iter_t`
+struct as a chunk of JSON with the `^` character indicating the iterator's
+position.
 
 For example, say you have a C program like:
     
