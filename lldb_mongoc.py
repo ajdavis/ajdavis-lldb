@@ -76,7 +76,6 @@ def get_inline_bytes(data):
 def get_allocated_bytes(buf, offset, debugger):
     # I don't know why this must be so different from get_inline_bytes.
     error = lldb.SBError()
-    check(error)
     buf_addr = buf.Dereference().GetAddress().offset + offset
     process = debugger.GetSelectedTarget().process
     len_bytes = process.ReadMemory(buf_addr, 4, error)
